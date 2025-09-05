@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DLMS Energy Meter - Live Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 1rem;
+        }
+
+        .status-online {
+            background: #27ae60;
+            color: white;
+        }
+
+        .status-offline {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.8rem 0;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            font-weight: 500;
+            color: #34495e;
+        }
+
+        .metric-value {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 1.1rem;
+        }
+
+        .metric-unit {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            margin-left: 0.3rem;
+        }
+
+        .big-number {
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .big-number .value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2980b9;
+            display: block;
+        }
+
+        .big-number .label {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .chart-container {
+            grid-column: 1 / -1;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #7f8c8d;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #3498db;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-left: 0.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .timestamp {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        .alert {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .power-indicator {
+            width: 100%;
+            height: 20px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+
+        .power-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #27ae60, #f39c12, #e74c3c);
+            transition: width 0.5s ease;
+        }
+
+        .device-info {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+
+        .device-info h4 {
+            color: #495057;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .device-info .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .refresh-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            background: #2980b9;
+        }
+
+        .error {
+            color: #e74c3c;
+            text-align: center;
+            padding: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔌 DLMS Energy Meter Dashboard</h1>
+        <span id="connectionStatus" class="status-badge status-offline">Connecting...</span>
+        <button class="refresh-btn" onclick="fetchData()">🔄 Refresh</button>
+    </div>
+
+    <div class="container">
+        <div id="alertContainer"></div>
+        
+        <div class="grid">
+            <!-- Real-time Energy Display -->
+            <div class="card">
+                <h3>⚡ Active Energy</h3>
+                <div class="big-number">
+                    <span class="value" id="totalEnergy">0.000</span>
+                    <span class="label">kWh Total</span>
+                </div>
+                <div class="power-indicator">
+                    <div class="power-fill" id="powerFill" style="width: 0%"></div>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Current Power</span>
+                    <span class="metric-value" id="currentPower">0.000 <span class="metric-unit">kW</span></span>
+                </div>
+            </div>
+
+            <!-- Voltage & Current -->
+            <div class="card">
+                <h3>📊 Electrical Parameters</h3>
+                <div class="metric">
+                    <span class="metric-label">Voltage L1</span>
+                    <span class="metric-value" id="voltage">0.0 <span class="metric-unit">V</span></span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Current L1</span>
+                    <span class="metric-value" id="current">0.00 <span class="metric-unit">A</span></span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Power Factor</span>
+                    <span class="metric-value" id="powerFactor">0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Frequency</span>
+                    <span class="metric-value" id="frequency">0.00 <span class="metric-unit">Hz</span></span>
+                </div>
+            </div>
+
+            <!-- Meter Information -->
+            <div class="card">
+                <h3>📋 Meter Information</h3>
+                <div class="metric">
+                    <span class="metric-label">Meter ID</span>
+                    <span class="metric-value" id="meterId">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Location</span>
+                    <span class="metric-value" id="location">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Last Reading</span>
+                    <span class="metric-value" id="lastReading">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Data Points</span>
+                    <span class="metric-value" id="dataPoints">0</span>
+                </div>
+            </div>
+
+            <!-- Maximum Demand -->
+            <div class="card">
+                <h3>📈 Maximum Demand</h3>
+                <div class="big-number">
+                    <span class="value" id="maxDemand">0.000</span>
+                    <span class="label">kW Peak</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Current Load %</span>
+                    <span class="metric-value" id="loadPercentage">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Device Information -->
+        <div class="card device-info">
+            <h4>📱 Device Information</h4>
+            <div class="info-grid">
+                <div>Type: <span id="deviceType">-</span></div>
+                <div>MAC: <span id="deviceMac">-</span></div>
+                <div>IP: <span id="deviceIp">-</span></div>
+                <div>RSSI: <span id="deviceRssi">-</span> dBm</div>
+                <div>Firmware: <span id="deviceFirmware">-</span></div>
+                <div>Uptime: <span id="serverUptime">-</span></div>
+            </div>
+        </div>
+
+        <!-- Real-time Chart -->
+        <div class="chart-container">
+            <h3>📊 Real-time Power Monitoring</h3>
+            <canvas id="powerChart" width="400" height="200"></canvas>
+        </div>
+
+        <div class="timestamp" id="lastUpdate">
+            Last updated: Never
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let powerChart;
+        let chartData = {
+            labels: [],
+            datasets: [{
+                label: 'Active Power (kW)',
+                data: [],
+                borderColor: '#3498db',
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        };
+        let lastSequence = -1;
+        let totalReadings = 0;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Dashboard initializing...');
+            initializeChart();
+            fetchData();
+            
+            // Auto-refresh every 10 seconds
+            setInterval(fetchData, 10000);
+        });
+
+        function initializeChart() {
+            const ctx = document.getElementById('powerChart').getContext('2d');
+            powerChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Power (kW)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+
+        async function fetchData() {
+            try {
+                console.log('📡 Fetching latest data...');
+                
+                // Fetch dashboard data
+                const response = await fetch('/api/v1/dashboard/data');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const data = await response.json();
+                console.log('📊 Data received:', data);
+                
+                updateConnectionStatus(true);
+                updateDashboard(data.data);
+                
+                // Fetch health info
+                const healthResponse = await fetch('/api/health');
+                if (healthResponse.ok) {
+                    const healthData = await healthResponse.json();
+                    updateServerInfo(healthData);
+                }
+                
+            } catch (error) {
+                console.error('❌ Error fetching data:', error);
+                updateConnectionStatus(false);
+                showAlert('Connection Error: Unable to fetch data from server', 'error');
+            }
+        }
+
+        function updateDashboard(data) {
+            const { meterInfo, latestReadings } = data;
+            
+            if (!meterInfo || meterInfo.length === 0) {
+                showAlert('No meter data available. Waiting for ESP32 to send data...', 'warning');
+                return;
+            }
+
+            const meter = meterInfo[0];
+            const deviceInfo = JSON.parse(meter.device_info || '{}');
+            
+            // Update meter information
+            document.getElementById('meterId').textContent = meter.meter_id;
+            document.getElementById('location').textContent = meter.location || 'Unknown';
+            document.getElementById('lastReading').textContent = formatTime(meter.last_seen);
+            
+            // Update device information
+            document.getElementById('deviceType').textContent = deviceInfo.type || 'Unknown';
+            document.getElementById('deviceMac').textContent = deviceInfo.mac_address || 'Unknown';
+            document.getElementById('deviceIp').textContent = deviceInfo.ip_address || 'Unknown';
+            document.getElementById('deviceRssi').textContent = deviceInfo.rssi || 'Unknown';
+            document.getElementById('deviceFirmware').textContent = deviceInfo.firmware || 'Unknown';
+            
+            if (latestReadings && latestReadings.length > 0) {
+                updateMetrics(latestReadings);
+                updateChart(latestReadings);
+                totalReadings += latestReadings.length;
+                document.getElementById('dataPoints').textContent = totalReadings;
+            }
+            
+            document.getElementById('lastUpdate').textContent = 
+                `Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+
+        function updateMetrics(readings) {
+            const metrics = {};
+            
+            // Parse all readings into metrics object
+            readings.forEach(reading => {
+                switch(reading.obis_code) {
+                    case '1.0.1.8.0.255': // Total Energy
+                        metrics.totalEnergy = reading.value;
+                        break;
+                    case '1.0.32.7.0.255': // Voltage L1
+                        metrics.voltage = reading.value;
+                        break;
+                    case '1.0.31.7.0.255': // Current L1
+                        metrics.current = reading.value;
+                        break;
+                    case '1.0.1.7.0.255': // Active Power
+                        metrics.activePower = reading.value;
+                        break;
+                    case '1.0.13.7.0.255': // Power Factor
+                        metrics.powerFactor = reading.value;
+                        break;
+                    case '1.0.14.7.0.255': // Frequency
+                        metrics.frequency = reading.value;
+                        break;
+                    case '1.0.1.6.0.255': // Maximum Demand
+                        metrics.maxDemand = reading.value;
+                        break;
+                }
+            });
+            
+            // Update UI elements
+            if (metrics.totalEnergy !== undefined) {
+                document.getElementById('totalEnergy').textContent = 
+                    (metrics.totalEnergy / 1000).toFixed(3);
+            }
+            
+            if (metrics.voltage !== undefined) {
+                document.getElementById('voltage').innerHTML = 
+                    `${metrics.voltage.toFixed(1)} <span class="metric-unit">V</span>`;
+            }
+            
+            if (metrics.current !== undefined) {
+                document.getElementById('current').innerHTML = 
+                    `${metrics.current.toFixed(2)} <span class="metric-unit">A</span>`;
+            }
+            
+            if (metrics.activePower !== undefined) {
+                const powerKw = metrics.activePower;
+                document.getElementById('currentPower').innerHTML = 
+                    `${powerKw.toFixed(3)} <span class="metric-unit">kW</span>`;
+                
+                // Update power indicator (0-10kW scale)
+                const powerPercentage = Math.min((powerKw / 10) * 100, 100);
+                document.getElementById('powerFill').style.width = `${powerPercentage}%`;
+            }
+            
+            if (metrics.powerFactor !== undefined) {
+                document.getElementById('powerFactor').textContent = 
+                    metrics.powerFactor.toFixed(2);
+            }
+            
+            if (metrics.frequency !== undefined) {
+                document.getElementById('frequency').innerHTML = 
+                    `${metrics.frequency.toFixed(2)} <span class="metric-unit">Hz</span>`;
+            }
+            
+            if (metrics.maxDemand !== undefined) {
+                document.getElementById('maxDemand').textContent = 
+                    metrics.maxDemand.toFixed(3);
+                
+                // Calculate load percentage
+                if (metrics.activePower !== undefined && metrics.maxDemand > 0) {
+                    const loadPercent = ((metrics.activePower / metrics.maxDemand) * 100).toFixed(1);
+                    document.getElementById('loadPercentage').textContent = `${loadPercent}%`;
+                }
+            }
+        }
+
+        function updateChart(readings) {
+            const powerReading = readings.find(r => r.obis_code === '1.0.1.7.0.255');
+            if (!powerReading) return;
+            
+            const now = new Date();
+            const timeLabel = now.toLocaleTimeString();
+            
+            // Add new data point
+            chartData.labels.push(timeLabel);
+            chartData.datasets[0].data.push(powerReading.value);
+            
+            // Keep only last 20 data points
+            if (chartData.labels.length > 20) {
+                chartData.labels.shift();
+                chartData.datasets[0].data.shift();
+            }
+            
+            powerChart.update('none'); // Update without animation for real-time feel
+        }
+
+        function updateConnectionStatus(isConnected) {
+            const statusElement = document.getElementById('connectionStatus');
+            if (isConnected) {
+                statusElement.textContent = '🟢 Online';
+                statusElement.className = 'status-badge status-online';
+            } else {
+                statusElement.textContent = '🔴 Offline';
+                statusElement.className = 'status-badge status-offline';
+            }
+        }
+
+        function updateServerInfo(healthData) {
+            if (healthData.uptime_seconds) {
+                const uptime = formatUptime(healthData.uptime_seconds);
+                document.getElementById('serverUptime').textContent = uptime;
+            }
+        }
+
+        function showAlert(message, type = 'info') {
+            const alertContainer = document.getElementById('alertContainer');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            
+            alertContainer.innerHTML = ''; // Clear previous alerts
+            alertContainer.appendChild(alertDiv);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return 'Never';
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            
+            if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
+
+        // Page visibility API to pause/resume updates
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                console.log('📱 Dashboard hidden, pausing updates');
+            } else {
+                console.log('📱 Dashboard visible, resuming updates');
+                fetchData(); // Immediate update when page becomes visible
+            }
+        });
+
+        console.log('✅ Dashboard script loaded successfully');
+    </script>
+</body>
+</html>
